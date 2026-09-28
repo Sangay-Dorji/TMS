@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Ticket Authenticator</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background-color: #f4f6f8;
+        margin: 0;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        width: 100%;
+        max-width: 400px;
+        box-sizing: border-box;
+        text-align: center;
+      }
+      h2 { margin-top: 0; color: #333; }
+      #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 15px; }
+      #result-box {
+        padding: 15px;
+        border-radius: 8px;
+        display: none;
+        margin-top: 10px;
+      }
+      .success { background-color: #e6f4ea; color: #137333; border: 1px solid #ceead6; }
+      .error { background-color: #fce8e6; color: #c5221f; border: 1px solid #fad2cf; }
+      .loading { background-color: #e8f0fe; color: #1a73e8; border: 1px solid #d2e3fc; }
+      .status-title { font-size: 1.2em; font-weight: bold; margin-bottom: 5px; }
+      .status-msg { font-size: 0.95em; }
+    </style>
+  </head>
+  <body>
+
+    <div class="card">
+      <h2>Ticket Authenticator</h2>
+      <div id="reader"></div>
+      
+      <div id="result-box">
+        <div class="status-title" id="status-title"></div>
+        <div class="status-msg" id="status-msg"></div>
+      </div>
+    </div>
+
+    <script>
+      // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE (MUST END IN /exec)
+      const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxrd7I5HFoiua9zih5kY9YA1_-7px_TbDoT_nkeXgnYFhxJuQb-4YLYqs-00_bbm3AuBw/exec";
+
+      let html5QrCode;
+      let isProcessing = false;
+
+      function onScanSuccess(decodedText) {
+        if (isProcessing) return;
+        isProcessing = true;
+
+        showStatus('loading', 'VALIDATING...', `Checking Ticket ID: ${decodedText}`);
+
+        // Post decoded text to Google Apps Script
+        fetch(SCRIPT_URL, {
+          method: 'POST',
+          mode: 'cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ ticketId: decodedText })
+        })
+        .then(res => res.json())
+        .then(response => {
+          const boxClass = response.success ? 'success' : 'error';
+          showStatus(boxClass, response.statusText, response.message);
+          
+          // Reset scanner automatically after 3 seconds for the next ticket
+          setTimeout(() => {
+            document.getElementById('result-box').style.display = 'none';
+            isProcessing = false;
+          }, 3000);
+        })
+        .catch(err => {
+          showStatus('error', 'NETWORK ERROR', 'Could not reach database server.');
+          setTimeout(() => {
+            document.getElementById('result-box').style.display = 'none';
+            isProcessing = false;
+          }, 3000);
+        });
+      }
+
+      function showStatus(type, title, msg) {
+        const box = document.getElementById('result-box');
+        box.className = type;
+        box.style.display = 'block';
+        document.getElementById('status-title').innerText = title;
+        document.getElementById('status-msg').innerText = msg;
+      }
+
+      // Automatically launch camera on page load
+      window.addEventListener('load', () => {
+        html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          onScanSuccess,
+          () => {} // Ignore frame-by-frame scan failures
+        ).catch(err => {
+          showStatus('error', 'CAMERA ERROR', 'Please allow camera access in browser settings.');
+        });
+      });
+    </script>
+  </body>
+</html>
